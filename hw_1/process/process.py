@@ -88,7 +88,8 @@ class Documents:
             cos_pairs.append((i, cos))
         
         
-        cos_pairs = sorted(cos_pairs, key=lambda x: x[1], reverse=True)[:n]
+        l = n if len(cos_pairs) > n else len(cos_pairs) 
+        cos_pairs = sorted(cos_pairs, key=lambda x: x[1], reverse=True)[:l]
         res = []
         for i, cos in cos_pairs:
             self.__sentences[i].set_weight(cos)

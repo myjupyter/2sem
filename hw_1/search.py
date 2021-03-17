@@ -1,16 +1,22 @@
 #!/usr/bin/env python3
 
+import sys
+
 import download
 import process
+import flags
 
 def main():
-    with open('links.txt') as file:
+    parser = flags.ArgsParser()
+    args = parser.Parse(sys.argv[1:])
+
+    with open(args.links) as file:
         links = [link for link in file.read().split('\n') if len(link) != 0]
 
-    paths = download.download_all(links)
+    paths = download.download_all(links, args.download)
 
     docs = process.Documents(paths)
-    ss = docs.search_n('На чикагской выставке 1893 года посетители катались на колесе обозрения, а на выставке 1933 года — на скайрайде', 10)
+    ss = docs.search_n(args.query, args.number)
     
     for s in ss:
         print('Текст: {:s}\nПредложение: {:s}\nВес: {:f}\n\n'.format(s.doc_name, s.__str__(), s.weight))

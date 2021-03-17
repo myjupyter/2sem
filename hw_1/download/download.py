@@ -17,20 +17,24 @@ def __clear(text):
     div = soup.findAll('div', {'id':'bodyContent'})
     return ' '.join([p.get_text().strip() for p in soup.select('p')])
 
-def download_all(links):
+def download_all(links, force = False):
     files = [] 
     for link in links:
-        files.append(download(link))
+        files.append(download(link, force))
     
     return files
 
-def download(link):
+def download(link, force = False):
     url = urlparse(unquote(link))
     
     file_name = os.path.basename(url.path)
     path = url.netloc+os.path.dirname(url.path)
     
     full_path = os.path.join(path, file_name)
+
+    # if file already exists
+    if os.path.isfile(full_path) and not force:
+        return full_path
 
     __mkdirp(path) 
 
