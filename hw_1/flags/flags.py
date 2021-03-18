@@ -34,6 +34,13 @@ class ArgsParser:
                 type = str,
                 help = 'path to links file',
         )
+
+        self.parser.add_argument(
+                '-m', '--method',
+                default = 1,
+                type = int,
+                help = 'method for tf',
+        )
     
     def Parse(self, args):
         a = Args()

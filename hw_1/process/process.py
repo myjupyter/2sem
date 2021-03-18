@@ -74,13 +74,18 @@ class Documents:
         
         return math.log10(n_sentences / has_sent)
     
-    def search_n(self, query, n):
+    def search_n(self, query, n, method=1):
         query = Query(query) 
         query_tf_vector = query.tf_vector
         
         pairs = {}
         for i in range(len(self.__sentences)):
-            pairs[i] =  tf_idf(self.__sentences[i].tf(query.coords), self.idf(query.coords))
+            tf = 0
+            if method >= 1:
+                tf = self.__sentences[i].tf(query.coords)
+            if method < 1:
+                tf = self.__sentences[i].tf2(query.coords)
+            pairs[i] =  tf_idf(tf, self.idf(query.coords))
         
         cos_pairs = [] 
         for i, v in pairs.items():
@@ -133,7 +138,8 @@ class Sentence:
 
     def tf2(self, coords):
         tf = self.tf(coords)
-        tf_max = max(tf.items(), key = lambda x: x[1])
+        tf_max = max(tf.items(), key = lambda x: x[1])[1]
+        tf_max = tf_max if tf_max != 0 else 1
         return {coord: 0.4 + 0.6 * self.__tf(coord) / tf_max for coord in coords}
     
     def __tf(self, word):
