@@ -3,7 +3,7 @@
 Put your wiki links into link file and lauch script, don't ask me, why did I do it.
 
 ```
-usage: search.py [-h] -q QUERY [-n NUMBER] [-d DOWNLOAD] -l LINKS [-m METHOD]
+usage: search.py [-h] -q QUERY [-n NUMBER] [-d DOWNLOAD] -l LINKS [-m METHOD] [-o OUTPUT]
 
 silly td-idf searcher
 
@@ -19,4 +19,6 @@ optional arguments:
                         path to links file
   -m METHOD, --method METHOD
                         method for tf
+  -o OUTPUT, --output OUTPUT
+                        output file
 ```
