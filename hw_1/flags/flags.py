@@ -41,6 +41,13 @@ class ArgsParser:
                 type = int,
                 help = 'method for tf',
         )
+
+        self.parser.add_argument(
+                '-o', '--output',
+                default = 'result.json',
+                type = str,
+                help = 'output file',
+        )
     
     def Parse(self, args):
         a = Args()
