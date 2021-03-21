@@ -32,9 +32,14 @@ class Query:
     def coords(self):
         return set(self.__counter.keys())
 
-    @property
-    def tf_vector(self):
-        return {coord: self.tf(coord) for coord in self.coords}
+    def tf_vector(self, method=1):
+        tf = {coord: self.tf(coord) for coord in self.coords}
+        if method >= 1:
+            return tf
+        tf_max = max(tf.items(), key = lambda x: x[1])[1]
+        if tf_max == 0:
+            return {coord: 0.0 for coord in self.coords}
+        return {coord: 0.4 + 0.6 * self.tf(coord) / tf_max for coord in self.coords}
         
 class Documents:
     def __init__(self, doc_paths = None):
@@ -76,20 +81,23 @@ class Documents:
     
     def search_n(self, query, n, method=1):
         query = Query(query) 
-        query_tf_vector = query.tf_vector
+        query_tf_vector = query.tf_vector(method)
         
         pairs = {}
         for i in range(len(self.__sentences)):
             tf = 0
             if method >= 1:
-                tf = self.__sentences[i].tf(query.coords)
-            if method < 1:
-                tf = self.__sentences[i].tf2(query.coords)
-            pairs[i] =  tf_idf(tf, self.idf(query.coords))
+                tf = self.__sentences[i].tf()
+            else:
+                tf = self.__sentences[i].tf2()
+            tfidf = tf_idf(tf, self.idf(query.coords))
+            pairs[i] = tfidf
+
         
         cos_pairs = [] 
         for i, v in pairs.items():
             cos = cosine(query_tf_vector, v)
+            print(self.__sentences[i], query_tf_vector, v, cos)
             cos_pairs.append((i, cos))
         
         
@@ -133,14 +141,18 @@ class Sentence:
     def counter(self):
         return self.__counter
 
-    def tf(self, coords):
-        return {coord: self.__tf(coord) for coord in coords}
+    def tf(self):
+        return self.__counter
+        #return {coord: self.__tf(coord) for coord in coords}
 
-    def tf2(self, coords):
-        tf = self.tf(coords)
+    def tf2(self):
+        tf = self.tf()
+        if len(tf) == 0:
+            return {}
         tf_max = max(tf.items(), key = lambda x: x[1])[1]
-        tf_max = tf_max if tf_max != 0 else 1
-        return {coord: 0.4 + 0.6 * self.__tf(coord) / tf_max for coord in coords}
+        if tf_max == 0:
+            return {coord: 0.0 for coord in coords}
+        return {coord: 0.4 + 0.6 * tf / tf_max for coord, tf in tf.items()}
     
     def __tf(self, word):
         norm_word = normalize_word(word)
@@ -173,7 +185,9 @@ def cosine(tf_idf1, tf_idf2):
     norm = L2(tf_idf1) * L2(tf_idf2) 
     if norm == 0.0:
         return norm
-    return scal_mul(tf_idf1, tf_idf2) / norm 
+    n = scal_mul(tf_idf1, tf_idf2) / norm 
+#    print(tf_idf1, tf_idf2, n)
+    return n
         
 def L2(vector):
     return math.sqrt(sum([x*x for x in vector.values()]))  
