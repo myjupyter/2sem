@@ -67,15 +67,15 @@ def split_on_section(raw_text):
 
 class Atom:
     __data_order = {
-        0: 'atom_id',
-        1: 'atom_name',
-        2: 'x',
-        3: 'y',
-        4: 'z',
-        5: 'atom_type',
-        6: 'subst_id',
-        7: 'subst_name',
-        8: 'charge',
+        0: ('atom_id', int),
+        1: ('atom_name', str),
+        2: ('x', float),
+        3: ('y', float),
+        4: ('z', float),
+        5: ('atom_type', str),
+        6: ('subst_id', int),
+        7: ('subst_name', str),
+        8: ('charge', float),
     }
 
     def __init__(self, data=None):
@@ -87,7 +87,8 @@ class Atom:
             raise ValueError('not enough parameters')
 
         for i, v in enumerate(ss[:len(Atom.__data_order)]):
-            self.__dict__[Atom.__data_order[i]] = v
+            name, func = Atom.__data_order[i]
+            self.__dict__[name] = func(v)
 
     def __repr__(self):
         return 'Atom(id={}, name={}, charge={})'.format(
@@ -97,6 +98,11 @@ class Atom:
         return 'id={}, name={}, charge={}'.format(
             self.atom_id, self.atom_name, self.charge)
 
+    def distance(self, atom = None) -> float:
+        if atom is None:
+            raise ValueError('None atom')
+        return numpy.linalg.norm(self.coord - atom.coord)
+        
     @property
     def coord(self):
         return numpy.array([
@@ -108,10 +114,10 @@ class Atom:
 
 class Bond:
     __data_order = {
-        0: 'bond_id',
-        1: 'origin_atom_id',
-        2: 'target_atom_id',
-        3: 'bond_type',
+        0: ('bond_id', int),
+        1: ('origin_atom_id', int),
+        2: ('target_atom_id', int),
+        3: ('bond_type', str),
     }
 
     def __init__(self, data=None):
@@ -123,4 +129,5 @@ class Bond:
             raise ValueError('not enough parameters')
 
         for i, v in enumerate(ss[:len(Bond.__data_order)]):
-            self.__dict__[Bond.__data_order[i]] = v
+            name, func = Bond.__data_order[i]
+            self.__dict__[name] = func(v)
