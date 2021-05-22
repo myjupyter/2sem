@@ -1,8 +1,9 @@
 import re
 import numpy
 
-__token__ = '@<TRIPOS>'
+from dictionary import atom_type_mapping, bs_energy, bs_energy_K_r_mean, bs_energy_req_mean
 
+__token__ = '@<TRIPOS>'
 
 def create_atoms(data=None):
     ss = data.split('\n')
@@ -43,6 +44,21 @@ class Molecule:
                 obj[section_name.lower()] = __tokens_class_mapping__[
                     section_name](data)
         self.__dict__.update(obj)
+
+    def bond_stretching_energy(self):
+        bse = 0
+        for bond in self.bonds.values():
+            i, j = bond.origin_atom_id, bond.target_atom_id
+            rho = self.atoms[i].distance(self.atoms[j])
+            _, name1, _, name2 = *self.atoms[i].atom_types, *self.atoms[j].atom_types
+            K_r, req = bs_energy_K_r_mean, bs_energy_req_mean
+            if bs_energy.get(frozenset((name1, name2))) is not None:
+                coef = bs_energy.get(frozenset((name1, name2)))
+                K_r, req = coef['K_r'], coef['req']
+                coef = bs_energy[frozenset((name1, name2))]
+            bse += K_r * (rho - req) ** 2 
+        return bse / len(self.atoms)
+
 
     @property
     def atoms(self):
@@ -102,6 +118,10 @@ class Atom:
         if atom is None:
             raise ValueError('None atom')
         return numpy.linalg.norm(self.coord - atom.coord)
+
+    @property
+    def atom_types(self):
+        return (self.atom_type, atom_type_mapping.get(self.atom_type))
         
     @property
     def coord(self):

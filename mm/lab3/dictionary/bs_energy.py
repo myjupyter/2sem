@@ -1,4 +1,4 @@
-from dictionary.process import process_data
+from dictionary.process import process_bs_energy, K_r_mean, req_mean
 
 __bs_energy = {
     "data": [
@@ -87,4 +87,6 @@ __bs_energy = {
         {"bind": "CT-F ", "K_r": 367.0, "req": 1.380}
     ]
 }
-bs_energy = process_data(__bs_energy)
+bs_energy = process_bs_energy(__bs_energy)
+bs_energy_K_r_mean = K_r_mean(__bs_energy)
+bs_energy_req_mean = req_mean(__bs_energy)
