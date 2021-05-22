@@ -1,4 +1,6 @@
-bending_energy = {
+from dictionary.process import process_data
+
+__bending_energy = {
     "data": [
         {"bind": "HW-OW-HW", "angle": 100.0, "qeq": 104.52},
         {"bind": "HW-HW-OW", "angle": 0.0, "qeq": 127.74},
@@ -193,3 +195,4 @@ bending_energy = {
         {"bind": "F -CT-H1", "angle": 35.0, "qeq": 109.50}
     ]
 }
+bending_energy = process_data(__bending_energy)

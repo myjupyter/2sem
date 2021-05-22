@@ -1,4 +1,6 @@
-bs_energy = {
+from dictionary.process import process_data
+
+__bs_energy = {
     "data": [
         {"bind": "OW-HW", "K_r": 553.0, "req": 0.9572},
         {"bind": "HW-HW", "K_r": 553.0, "req": 1.5136},
@@ -85,3 +87,4 @@ bs_energy = {
         {"bind": "CT-F ", "K_r": 367.0, "req": 1.380}
     ]
 }
+bs_energy = process_data(__bs_energy)
