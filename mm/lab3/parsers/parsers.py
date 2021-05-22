@@ -57,7 +57,7 @@ class Molecule:
                 K_r, req = coef['K_r'], coef['req']
                 coef = bs_energy[frozenset((name1, name2))]
             bse += K_r * (rho - req) ** 2 
-        return bse / len(self.atoms)
+        return bse / 2 
 
 
     @property
