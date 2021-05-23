@@ -1,6 +1,8 @@
 import re
 import numpy
 
+from scipy.optimize import minimize
+
 from dictionary import bs_energy_K_r_mean, bs_energy_req_mean
 from dictionary import bending_energy_K_q_mean, bending_energy_qeq_mean
 from dictionary import atom_type_mapping, bs_energy, bending_energy
@@ -48,6 +50,7 @@ class Molecule:
         self.__dict__.update(obj)
         for bond in self.bonds.values():
             bond.set_atoms_link(self.atoms)
+        self.__bond_angle_count = -1
 
     def bond_stretching_energy(self):
         bse = 0
@@ -62,6 +65,52 @@ class Molecule:
                 coef = bs_energy[frozenset((name1, name2))]
             bse += K_r * (rho - req) ** 2 
         return bse / 2 
+
+    def bse(self):
+        rho_list = []
+        for bond in self.bonds.values():
+            i, j = bond.origin_atom_id, bond.target_atom_id
+            rho_list.append(self.atoms[i].distance(self.atoms[j]))
+        return self.__bond_stretching_energy(rho_list)
+
+    def optimized_bse(self):
+        n = len(self.bonds)
+        return minimize(lambda x: numpy.sum(self.__bond_stretching_energy(x)), x0=[0]*n, method='SLSQP', bounds = [(0, None)]*n) 
+
+    def optimized_be(self):
+        self.__bond_triplets()
+        m = self.__bond_angle_count
+        return minimize(lambda x: numpy.sum(self.__bending_energy(x)), x0=[0]*m, method='SLSQP', bounds = [(1., 180.)]*m) 
+
+    def optimized_energy(self):
+        self.__bond_triplets()
+        n = len(self.bonds)
+        m = int(self.__bond_angle_count) 
+        print(n, m)
+        return minimize(
+                lambda x: numpy.sum(
+                    numpy.concatenate((
+                        self.__bond_stretching_energy(x[:n]),
+                        self.__bending_energy(x[n:])
+                    ))
+                ),
+                x0=[0.01]*(n+m),
+                method='SLSQP',
+                bounds=[(0., None)]*n + [(0., 180.)]*m
+        )
+
+    def __bond_stretching_energy(self, rho_list):
+        bse = numpy.array([])
+        for k, bond in enumerate(self.bonds.values()):
+            i, j = bond.origin_atom_id, bond.target_atom_id
+            name1, name2 = self.atoms[i].atom_mapped_type, self.atoms[j].atom_mapped_type
+            K_r, req = bs_energy_K_r_mean, bs_energy_req_mean
+            if bs_energy.get(frozenset((name1, name2))) is not None:
+                coef = bs_energy.get(frozenset((name1, name2)))
+                K_r, req = coef['K_r'], coef['req']
+                coef = bs_energy[frozenset((name1, name2))]
+            bse = numpy.append(bse, 0.5 * K_r * (rho_list[k] - req) ** 2) 
+        return bse
 
     def bending_energy(self):
         be = 0
@@ -81,7 +130,27 @@ class Molecule:
                     K_q, qeq = t['K_q'], t['qeq']  
                 be += K_q * (q - qeq) ** 2
         return be / 2
-             
+
+    def __bending_energy(self, q):
+        be = numpy.array([])
+        index_i = 0
+        for bond_i, bond_js in self.__bond_triplets().items():
+            for bond_j in bond_js:
+                f, b = self.bonds[bond_i].chain(self.bonds[bond_j])
+                key1 = frozenset([(i, self.atoms[j].atom_mapped_type) for i, j in enumerate(f)])
+                K_q, qeq = bending_energy_K_q_mean, bending_energy_qeq_mean
+                if bending_energy.get(key1) is None:
+                    key2 = frozenset([(i, self.atoms[j].atom_mapped_type) for i, j in enumerate(b)])
+                    if bending_energy.get(key2) is not None:
+                        t = bending_energy[key2]
+                        K_q, qeq = t['K_q'], t['qeq'] 
+                else:
+                    t = bending_energy[key1]
+                    K_q, qeq = t['K_q'], t['qeq']  
+                be = numpy.append(be, 0.5 * K_q * (q[index_i] - qeq) ** 2)
+                index_i += 1
+        return be
+
     def __bond_triplets(self):
         bonds_list = dict()
         for i, b1 in self.bonds.items():
@@ -94,6 +163,9 @@ class Molecule:
                     if bonds_list.get(b1.bond_id) is None:
                        bonds_list[b1.bond_id] = list()
                     bonds_list[b1.bond_id].append(b2.bond_id)
+        self.__bond_angle_count = 0
+        for v in bonds_list.values():
+            self.__bond_angle_count += len(v)
         return bonds_list
         
     @property
