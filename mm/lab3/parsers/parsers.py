@@ -1,7 +1,9 @@
 import re
 import numpy
 
-from dictionary import atom_type_mapping, bs_energy, bs_energy_K_r_mean, bs_energy_req_mean
+from dictionary import bs_energy_K_r_mean, bs_energy_req_mean
+from dictionary import bending_energy_K_q_mean, bending_energy_qeq_mean
+from dictionary import atom_type_mapping, bs_energy, bending_energy
 
 __token__ = '@<TRIPOS>'
 
@@ -44,13 +46,15 @@ class Molecule:
                 obj[section_name.lower()] = __tokens_class_mapping__[
                     section_name](data)
         self.__dict__.update(obj)
+        for bond in self.bonds.values():
+            bond.set_atoms_link(self.atoms)
 
     def bond_stretching_energy(self):
         bse = 0
         for bond in self.bonds.values():
             i, j = bond.origin_atom_id, bond.target_atom_id
             rho = self.atoms[i].distance(self.atoms[j])
-            _, name1, _, name2 = *self.atoms[i].atom_types, *self.atoms[j].atom_types
+            x, name1, y, name2 = *self.atoms[i].atom_types, *self.atoms[j].atom_types
             K_r, req = bs_energy_K_r_mean, bs_energy_req_mean
             if bs_energy.get(frozenset((name1, name2))) is not None:
                 coef = bs_energy.get(frozenset((name1, name2)))
@@ -59,7 +63,39 @@ class Molecule:
             bse += K_r * (rho - req) ** 2 
         return bse / 2 
 
-
+    def bending_energy(self):
+        be = 0
+        for bond_i, bond_js in self.__bond_triplets().items():
+            for bond_j in bond_js:
+                q = angle(self.bonds[bond_i], self.bonds[bond_j]) 
+                f, b = self.bonds[bond_i].chain(self.bonds[bond_j])
+                key1 = frozenset([(i, self.atoms[j].atom_mapped_type) for i, j in enumerate(f)])
+                K_q, qeq = bending_energy_K_q_mean, bending_energy_qeq_mean
+                if bending_energy.get(key1) is None:
+                    key2 = frozenset([(i, self.atoms[j].atom_mapped_type) for i, j in enumerate(b)])
+                    if bending_energy.get(key2) is not None:
+                        t = bending_energy[key2]
+                        K_q, qeq = t['K_q'], t['qeq'] 
+                else:
+                    t = bending_energy[key1]
+                    K_q, qeq = t['K_q'], t['qeq']  
+                be += K_q * (q - qeq) ** 2
+        return be / 2
+             
+    def __bond_triplets(self):
+        bonds_list = dict()
+        for i, b1 in self.bonds.items():
+            for j, b2 in self.bonds.items():
+                if j <= i:
+                    continue
+                inter = b1.atom_indexes.intersection(
+                        b2.atom_indexes)
+                if inter != set():
+                    if bonds_list.get(b1.bond_id) is None:
+                       bonds_list[b1.bond_id] = list()
+                    bonds_list[b1.bond_id].append(b2.bond_id)
+        return bonds_list
+        
     @property
     def atoms(self):
         return self.atom
@@ -121,7 +157,11 @@ class Atom:
 
     @property
     def atom_types(self):
-        return (self.atom_type, atom_type_mapping.get(self.atom_type))
+        return (self.atom_type, self.atom_mapped_type)
+
+    @property
+    def atom_mapped_type(self):
+        return atom_type_mapping.get(self.atom_type)
         
     @property
     def coord(self):
@@ -151,3 +191,40 @@ class Bond:
         for i, v in enumerate(ss[:len(Bond.__data_order)]):
             name, func = Bond.__data_order[i]
             self.__dict__[name] = func(v)
+
+    @property
+    def atom_indexes(self):
+        return set((self.origin_atom_id, self.target_atom_id))
+
+    def get_atom_neighbour(self, atom_id):
+        ids = self.atom_indexes
+        if atom_id not in ids:
+            return None
+        return list(self.atom_indexes.difference(set([atom_id])))[0]
+
+    def chain(self, bond):
+        inter = self.intersect(bond)
+        if inter == set():
+            return None
+        l = list(inter)[0]
+        p = self.get_atom_neighbour(l)
+        q = bond.get_atom_neighbour(l)
+        t = (p, l, q)
+        return tuple([[e for e in t[::j]] for j in [1,-1]])  
+
+    def intersect(self, bond):
+        return self.atom_indexes.intersection(bond.atom_indexes) 
+
+    def set_atoms_link(self, atoms):
+        self.atoms_link = atoms
+
+    def vectorize(self):
+        return self.atoms_link[self.origin_atom_id].coord - self.atoms_link[self.target_atom_id].coord
+
+def cosine(x, y):
+    return numpy.dot(x, y) / (numpy.linalg.norm(x) * numpy.linalg.norm(y)) 
+
+def angle(x, y):
+    d = numpy.degrees(numpy.arccos(cosine(x.vectorize(), y.vectorize())))
+    return d if d > 90 else 180 - d
+
