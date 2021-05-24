@@ -28,6 +28,12 @@ def process_bending_energy(data: dict):
         new_data[frozenset([(i, atom) for i, atom in enumerate(atoms[::-1])])] = el
     return new_data
 
+def process_van_der_waals_energy(data: dict):
+    new_data = dict()
+    for key, value in data.items():
+        new_data[key.strip()] = value
+    return new_data
+
 def K_q_mean(data: dict):
     K_q_list = list()
     for el in data['data']:

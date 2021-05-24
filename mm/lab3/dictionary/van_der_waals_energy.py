@@ -1,4 +1,6 @@
-__van_der_waals_params = {
+from dictionary.process import process_van_der_waals_energy
+
+__van_der_waals_energy = {
     "data": {
         "H ": {"R*j": 0.6000, "e_k": 0.0157},
         "HO": {"R*j": 0.0000, "e_k": 0.0000},
@@ -36,3 +38,4 @@ __van_der_waals_params = {
         "EP": {"R*j": 0.0, "e_k": 0.0},
     }
 }
+van_der_waals_energy = process_van_der_waals_energy(__van_der_waals_energy)
