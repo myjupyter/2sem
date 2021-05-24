@@ -19,3 +19,4 @@ atom_type_mapping = {
     'H.spc': None,
     'H.t3p':'HW',
 }
+

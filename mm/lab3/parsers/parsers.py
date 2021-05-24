@@ -95,7 +95,8 @@ class Molecule:
                     ))
                 ),
                 x0=[0.01]*(n+m),
-                method='SLSQP',
+                method='BFGS',
+                tol=1e-10,
                 bounds=[(0., None)]*n + [(0., 180.)]*m
         )
 
@@ -150,6 +151,12 @@ class Molecule:
                 be = numpy.append(be, 0.5 * K_q * (q[index_i] - qeq) ** 2)
                 index_i += 1
         return be
+
+    def __coloumb_energy(self):
+        pass
+
+    def bond_triplets(self):
+        return self.__bond_triplets()
 
     def __bond_triplets(self):
         bonds_list = dict()
