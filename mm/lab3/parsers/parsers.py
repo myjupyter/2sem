@@ -1,11 +1,12 @@
 import re
 import numpy
 
+from itertools import combinations
 from scipy.optimize import minimize
 
 from dictionary import bs_energy_K_r_mean, bs_energy_req_mean
 from dictionary import bending_energy_K_q_mean, bending_energy_qeq_mean
-from dictionary import atom_type_mapping, bs_energy, bending_energy
+from dictionary import atom_type_mapping, bs_energy, bending_energy, van_der_waals_energy
 
 __token__ = '@<TRIPOS>'
 
@@ -86,18 +87,30 @@ class Molecule:
         self.__bond_triplets()
         n = len(self.bonds)
         m = int(self.__bond_angle_count) 
-        print(n, m)
+        p = len(self.van_der_waals_atom_pairs())
         return minimize(
                 lambda x: numpy.sum(
                     numpy.concatenate((
                         self.__bond_stretching_energy(x[:n]),
-                        self.__bending_energy(x[n:])
+                        self.__bending_energy(x[n:n+m]),
+                        self.__van_der_waals_and_coloumb_energy(x[n+m:]),
                     ))
                 ),
-                x0=[0.01]*(n+m),
-                method='BFGS',
-                tol=1e-10,
-                bounds=[(0., None)]*n + [(0., 180.)]*m
+                x0=[1.0]*(n+m+p),#numpy.fabs(numpy.random.rand(n+m+p)) * 100,
+                method='SLSQP',
+                options= {
+                    'maxiter': 2000,
+                    'ftol': 10e-10,
+                },
+                bounds=[(0., None)]*n + [(0., 180.)]*m + [(0.1, None)]*p,
+                constraints=[{'type': 'eq', 'fun': lambda x: numpy.sum(
+                        numpy.concatenate((
+                            self.__bond_stretching_energy(x[:n]),
+                            self.__bending_energy(x[n:n+m]),
+                            self.__van_der_waals_and_coloumb_energy(x[n+m:]),
+                        ))
+                    )
+                }]
         )
 
     def __bond_stretching_energy(self, rho_list):
@@ -152,8 +165,6 @@ class Molecule:
                 index_i += 1
         return be
 
-    def __coloumb_energy(self):
-        pass
 
     def bond_triplets(self):
         return self.__bond_triplets()
@@ -174,6 +185,89 @@ class Molecule:
         for v in bonds_list.values():
             self.__bond_angle_count += len(v)
         return bonds_list
+
+    def end_combinations(self):
+        bonds_list = self.__bond_triplets()
+        ec = set()
+        for b1, blist in bonds_list.items():
+            for b2 in blist:
+                e = self.bonds[b1].chain(self.bonds[b2])[0]
+                ec.add((e[0], e[2]))
+
+        for bond in self.bonds.values():
+            ec.add(bond.atom_indexes_tuple)
+
+        return ec
+    
+    def van_der_waals_atom_pairs(self):
+        all_pairs = set(combinations(self.atoms.keys(), r=2))
+        return all_pairs.difference(self.end_combinations())
+
+    def optimized_van_der_waals_energy(self):
+        p = len(self.van_der_waals_atom_pairs())
+        return minimize(
+                lambda x: numpy.sum(
+                    numpy.concatenate((
+                        self.__van_der_waals_energy(x),
+                    ))
+                ),
+                x0=[10.0]*p,#numpy.fabs(numpy.random.rand(p)) * 100,
+                method='SLSQP',
+                options= {
+                    'maxiter': 100000,
+                    'ftol': 10e-20,
+                },
+                bounds=[(0., None)]*p,
+                constraints=[{'type': 'eq', 'fun': lambda x: numpy.sum(self.__van_der_waals_energy(x))}],
+        )
+
+
+
+    def __van_der_waals_energy(self, rho_list):
+        seq = numpy.array([]) 
+        for i, t in enumerate(self.van_der_waals_atom_pairs()):
+            f, s = t
+            atom1, atom2 = self.atoms[f], self.atoms[s]
+            R_ij = atom1.R + atom2.R
+            e_ij = (atom1.e() * atom2.e()) ** 0.5
+            A = e_ij * (R_ij ** 12)
+            B = 2 * e_ij * (R_ij ** 6)
+            seq = numpy.append(seq,  A / rho_list[i] ** 12 - B / rho_list[i] ** 6) 
+        return seq
+    
+    def __van_der_waals_and_coloumb_energy(self, rho_list):
+        seq = numpy.array([]) 
+        eps = 8.9875517873681764*(10**9)
+        for i, t in enumerate(self.van_der_waals_atom_pairs()):
+            f, s = t
+            atom1, atom2 = self.atoms[f], self.atoms[s]
+            R_ij = atom1.R + atom2.R
+            e_ij = (atom1.e * atom2.e) ** 0.5
+            A = e_ij * (R_ij ** 12)
+            B = 2 * e_ij * (R_ij ** 6)
+            seq = numpy.append(seq,  A / (rho_list[i] ** 12) - B / (rho_list[i] ** 6) + eps * atom1.charge * atom2.charge * 10**(-18) / rho_list[i]) 
+        return seq
+
+    def van_der_waals_energy(self):
+        ss = 0
+        for f, s in self.van_der_waals_atom_pairs():
+            atom1, atom2 = self.atoms[f], self.atoms[s]
+            R = atom1.distance(atom2)
+            R_ij = atom1.R + atom2.R
+            e_ij = (atom1.e * atom2.e) ** 0.5
+            A = e_ij * (R_ij ** 12)
+            B = 2 * e_ij * (R_ij ** 6)
+            ss += A / (R ** 12) - B / (R ** 6) 
+        return ss 
+
+    def coloumb_energy(self):
+        ss = 0
+        eps = 8.9875517873681764*(10**9)
+        for f, s in self.van_der_waals_atom_pairs():
+            atom1, atom2 = self.atoms[f], self.atoms[s]
+            R = atom1.distance(atom2)
+            ss += eps * atom1.charge * atom2.charge * 10**(-18) / R
+        return ss
         
     @property
     def atoms(self):
@@ -235,6 +329,17 @@ class Atom:
         return numpy.linalg.norm(self.coord - atom.coord)
 
     @property
+    def R(self):
+        return self.__vdw_coef('R*j')
+
+    @property
+    def e(self):
+        return self.__vdw_coef('e_k') 
+
+    def __vdw_coef(self, coef_name):
+        return van_der_waals_energy.get(self.atom_mapped_type).get(coef_name)
+
+    @property
     def atom_types(self):
         return (self.atom_type, self.atom_mapped_type)
 
@@ -272,6 +377,10 @@ class Bond:
             self.__dict__[name] = func(v)
 
     @property
+    def atom_indexes_tuple(self):
+        return (self.origin_atom_id, self.target_atom_id)
+
+    @property
     def atom_indexes(self):
         return set((self.origin_atom_id, self.target_atom_id))
 
@@ -306,4 +415,3 @@ def cosine(x, y):
 def angle(x, y):
     d = numpy.degrees(numpy.arccos(cosine(x.vectorize(), y.vectorize())))
     return d if d > 90 else 180 - d
-

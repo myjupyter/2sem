@@ -30,7 +30,7 @@ def process_bending_energy(data: dict):
 
 def process_van_der_waals_energy(data: dict):
     new_data = dict()
-    for key, value in data.items():
+    for key, value in data['data'].items():
         new_data[key.strip()] = value
     return new_data
 
