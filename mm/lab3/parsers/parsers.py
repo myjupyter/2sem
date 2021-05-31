@@ -37,6 +37,41 @@ __tokens_class_mapping__ = {
     'BOND': create_bonds,
 }
 
+class Indexer:
+    def __init__(self, xk, n = None):
+        if n is None or len(xk) - 3 != 3 * n:
+            raise ValueError('wrong atoms number: got {} want {}'.format(len(xk), 3 * n))
+        self.xk = xk
+    
+    def __getitem__(self, i):
+        return numpy.array(self.xk[3*i:3*i+3])
+ 
+class Parameters:
+    def __init__(self, n = None, bonds = None, triplets = None):
+        self.n = n
+        self.bonds = bonds
+        self.triplets = triplets
+
+def bond_stretching_energy(parameters):
+    def energy(xk):
+        res = numpy.array([])
+        ind = Indexer(xk, parameters.n)
+        for bond in parameters.bonds:
+            r = numpy.linalg.norm(ind[bond.origin_atom_id] - ind[bond.target_atom_id])
+            res = numpy.append(res, 0.5 * bond.K_r * (bond.req - r) ** 2)
+        return res
+    return energy 
+
+
+def bending_energy(parameters):
+    def energy(xk):
+        res = numpy.array([])
+        ind = Indexer(xk, parameters.n)
+        for triplet in parameters.triplets:
+            #q = ...
+            res = numpy.append(res, 0.5 * triplet.K_q * (triplet.qeq - q) ** 2) 
+        return res
+    return energy
 
 class Molecule:
     def __init__(self, filepath):
@@ -53,79 +88,48 @@ class Molecule:
             bond.set_atoms_link(self.atoms)
         self.__bond_angle_count = -1
 
+    def get_ordered_coords():
+        return [atom.coord for _, atom in sorted(self.atoms.items(), key=lambda x: x[0])]
+
     def bond_stretching_energy(self):
-        bse = 0
-        for bond in self.bonds.values():
-            i, j = bond.origin_atom_id, bond.target_atom_id
-            rho = self.atoms[i].distance(self.atoms[j])
-            x, name1, y, name2 = *self.atoms[i].atom_types, *self.atoms[j].atom_types
-            K_r, req = bs_energy_K_r_mean, bs_energy_req_mean
-            if bs_energy.get(frozenset((name1, name2))) is not None:
-                coef = bs_energy.get(frozenset((name1, name2)))
-                K_r, req = coef['K_r'], coef['req']
-                coef = bs_energy[frozenset((name1, name2))]
-            bse += K_r * (rho - req) ** 2 
-        return bse / 2 
+        coords = self.get_ordered_coords()
+        xk = numpy.array([])
+        for coord in coords:
+            xk = numpy.append(xk, coord)
+        return numpy.sum(self.__bond_stretching_energy(xk))
 
-    def bse(self):
-        rho_list = []
-        for bond in self.bonds.values():
-            i, j = bond.origin_atom_id, bond.target_atom_id
-            rho_list.append(self.atoms[i].distance(self.atoms[j]))
-        return self.__bond_stretching_energy(rho_list)
-
-    def optimized_bse(self):
-        n = len(self.bonds)
-        return minimize(lambda x: numpy.sum(self.__bond_stretching_energy(x)), x0=[0]*n, method='SLSQP', bounds = [(0, None)]*n) 
-
-    def optimized_be(self):
-        self.__bond_triplets()
-        m = self.__bond_angle_count
-        return minimize(lambda x: numpy.sum(self.__bending_energy(x)), x0=[0]*m, method='SLSQP', bounds = [(1., 180.)]*m) 
+    def __bond_stretching_energy(self, xk):
+        nulls = numpy.array([0.]*3)
+        return bond_stretching_energy(
+                Parameters(
+                    n = len(self.atoms),
+                    bonds = self.bonds.values(),
+                )
+        )(numpy.append(nulls, xk))
 
     def optimized_energy(self):
-        self.__bond_triplets()
-        n = len(self.bonds)
-        m = int(self.__bond_angle_count) 
-        p = len(self.van_der_waals_atom_pairs())
+        def func(xk):
+            return numpy.sum(
+                self.__bond_stretching_energy(xk),
+            )
+        n = len(self.atoms) * 3
         return minimize(
-                lambda x: numpy.sum(
-                    numpy.concatenate((
-                        self.__bond_stretching_energy(x[:n]),
-                        self.__bending_energy(x[n:n+m]),
-                        self.__van_der_waals_and_coloumb_energy(x[n+m:]),
-                    ))
-                ),
-                x0=[1.0]*(n+m+p),#numpy.fabs(numpy.random.rand(n+m+p)) * 100,
-                method='SLSQP',
-                options= {
-                    'maxiter': 2000,
-                    'ftol': 10e-10,
-                },
-                bounds=[(0., None)]*n + [(0., 180.)]*m + [(0.1, None)]*p,
-                constraints=[{'type': 'eq', 'fun': lambda x: numpy.sum(
-                        numpy.concatenate((
-                            self.__bond_stretching_energy(x[:n]),
-                            self.__bending_energy(x[n:n+m]),
-                            self.__van_der_waals_and_coloumb_energy(x[n+m:]),
-                        ))
-                    )
-                }]
+            func,
+            x0=numpy.fabs(numpy.random.rand(n)) * 100,
+            method='SLSQP',
+            options = {
+                'maxiter': 2000,
+                'ftol': 10e-10,
+            },
+            bounds=[(0., None)]*n, 
+            constraints = [
+                {
+                    'type': 'eq', 
+                    'fun': func,
+                }
+            ]
         )
-
-    def __bond_stretching_energy(self, rho_list):
-        bse = numpy.array([])
-        for k, bond in enumerate(self.bonds.values()):
-            i, j = bond.origin_atom_id, bond.target_atom_id
-            name1, name2 = self.atoms[i].atom_mapped_type, self.atoms[j].atom_mapped_type
-            K_r, req = bs_energy_K_r_mean, bs_energy_req_mean
-            if bs_energy.get(frozenset((name1, name2))) is not None:
-                coef = bs_energy.get(frozenset((name1, name2)))
-                K_r, req = coef['K_r'], coef['req']
-                coef = bs_energy[frozenset((name1, name2))]
-            bse = numpy.append(bse, 0.5 * K_r * (rho_list[k] - req) ** 2) 
-        return bse
-
+ 
     def bending_energy(self):
         be = 0
         for bond_i, bond_js in self.__bond_triplets().items():
@@ -355,6 +359,14 @@ class Atom:
             self.z,
         ])
 
+class Triplets:
+    def __init__(self, b1, b2):
+        self.b1 = b1
+        self.b2 = b2
+
+    def __coef(self):
+        // 
+        return coef if coef is not None else {'K_q': bending_energy_K_q_mean, 'qeq': bending_energy_qeq_mean} 
 
 class Bond:
     __data_order = {
@@ -375,6 +387,23 @@ class Bond:
         for i, v in enumerate(ss[:len(Bond.__data_order)]):
             name, func = Bond.__data_order[i]
             self.__dict__[name] = func(v)
+            
+    def __repr__(self):
+        return 'Bond(id={}, origin_atom_id={}, target_atom_id={})'.format(
+            self.bond_id, self.origin_atom_id, self.target_atom_id)
+
+    def __coef(self):
+        x, y = self.atoms_link[self.origin_atom_id].atom_mapped_type, self.atoms_link[self.target_atom_id].atom_mapped_type 
+        coef = bs_energy.get(frozenset((x, y)))
+        return coef if coef is not None else {'K_r': bs_energy_K_r_mean, 'req': bs_energy_req_mean} 
+
+    @property
+    def K_r(self):
+        return self.__coef()['K_r']
+
+    @property
+    def req(self):
+        return self.__coef()['req']
 
     @property
     def atom_indexes_tuple(self):
@@ -414,4 +443,8 @@ def cosine(x, y):
 
 def angle(x, y):
     d = numpy.degrees(numpy.arccos(cosine(x.vectorize(), y.vectorize())))
+    return d if d > 90 else 180 - d
+
+def anglee(x, y):
+    d = numpy.degrees(numpy.arccos(cosine(x,y)))
     return d if d > 90 else 180 - d
