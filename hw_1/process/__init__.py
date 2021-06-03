@@ -1,1 +1,1 @@
-from process.process import Documents, Sentence 
+from process.process import Documents, Sentence, DocumentsProb, SentenceProb 

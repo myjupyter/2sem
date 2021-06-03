@@ -17,7 +17,7 @@ def main():
     paths = download.download_all(links, args.download)
 
     docs = process.Documents(paths)
-    ss = docs.search_n(args.query, args.number, args.method)
+    ss = docs.search_n(args.query, args.number)
     
     rr = []
     with open(args.output, 'w') as file:

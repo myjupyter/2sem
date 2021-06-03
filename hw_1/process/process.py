@@ -40,7 +40,93 @@ class Query:
         if tf_max == 0:
             return {coord: 0.0 for coord in self.coords}
         return {coord: 0.4 + 0.6 * self.tf(coord) / tf_max for coord in self.coords}
+
+class QueryProb:
+    def __init__(self, query = None):
+        if not isinstance(query, str):
+            raise Exception('query should be a string')
+        q = counter_from(clear_sentence(query))
+        self.__query = []
+        for w, c in q.items():
+            self.__query.extend([w]*c)
+
+    @property
+    def query(self):
+        return self.__query
+
+class DocumentsProb:
+    def __init__(self, doc_paths = None):
+        if not isinstance(doc_paths, list):
+            raise Exception('wrong type doc_path, doc_path should be a string')
+
+        self.__sentences = dict() 
+        self.__stat = dict()
+        for doc_path in doc_paths:
+            with open(doc_path) as file:
+                text = file.read()
+
+            sentences = text.split('.')
+            name = os.path.basename(doc_path)
+            sentences = [SentenceProb(sentence, name) for sentence in sentences]
+            
+            self.__sentences[name] = sentences
+            cc = Counter()
+            for s in sentences:
+                cc += s.counter
+            self.__stat[name] = cc 
+    
+        cc = Counter()
+        for v in self.__stat.values():
+            cc += v 
+        self.__words_counter = cc 
+        self.__words_count = sum([v for v in self.__words_counter.values()])
+
+    def search_n(self, query, n, l=0.9):
+        query = QueryProb(query) 
         
+        prob_model = dict()
+
+        n = self.__words_count
+        for sentences in  self.__sentences.values():
+            for sentence in sentences:
+                prod = 1
+                for word in query.query:
+                    p_t = 1/n if self.__words_counter.get(word) is None else self.__words_counter[word] / n 
+                    p_Md = 0 if sentence.counter.get(word) is None else sentence.counter[word] / sentence.words_count
+                    prod *= (l * p_t + (1 - l) * p_Md) 
+                sentence.set_weight(prod)
+                prob_model[prod] = sentence
+        return [v for _, v in sorted(prob_model.items(), key=lambda x: x[0], reverse=True)[:n]]
+
+class SentenceProb:
+    def __init__(self, sentence, doc_name):
+        self.__doc_name = doc_name
+        self.__original_sentence = sentence
+        self.__sentence = clear_sentence(sentence)  
+        self.__counter = counter_from(self.__sentence) 
+
+    def __str__(self):
+        return self.__original_sentence
+
+    def set_weight(self, w):
+        self.__weight = w
+
+    @property
+    def weight(self):
+        return self.__weight
+
+    @property
+    def doc_name(self):
+        return self.__doc_name
+    
+    @property
+    def counter(self):
+        return self.__counter
+
+    @property
+    def words_count(self):
+        return sum([v for v in self.counter.values()])
+   
 class Documents:
     def __init__(self, doc_paths = None):
         if not isinstance(doc_paths, list):
