@@ -183,7 +183,6 @@ class Documents:
         cos_pairs = [] 
         for i, v in pairs.items():
             cos = cosine(query_tf_vector, v)
-            print(self.__sentences[i], query_tf_vector, v, cos)
             cos_pairs.append((i, cos))
         
         

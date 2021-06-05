@@ -15,9 +15,13 @@ def main():
         links = [link for link in file.read().split('\n') if len(link) != 0]
 
     paths = download.download_all(links, args.download)
-
-    docs = process.Documents(paths)
-    ss = docs.search_n(args.query, args.number)
+    docs = None
+    if args.method == 2:
+        docs = process.DocumentsProb(paths)
+        ss = docs.search_n(args.query, args.number, args.lam)
+    else:
+        docs = process.Documents(paths)
+        ss = docs.search_n(args.query, args.number)
     
     rr = []
     with open(args.output, 'w') as file:

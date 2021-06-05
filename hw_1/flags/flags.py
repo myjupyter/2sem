@@ -39,7 +39,14 @@ class ArgsParser:
                 '-m', '--method',
                 default = 1,
                 type = int,
-                help = 'method for tf',
+                help = 'method for script ({0,1} - tf.idf, 2 - probability model)',
+        )
+
+        self.parser.add_argument(
+                '--lam',
+                default = 0.9,
+                type = float,
+                help = 'lambda value (works only with probability model)'
         )
 
         self.parser.add_argument(
